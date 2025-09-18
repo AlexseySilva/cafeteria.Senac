@@ -1,0 +1,2 @@
+.env # Arquivo de variáveis de ambiente (contém credenciais sensíveis)
+\node_modules # Pasta de módulos do Node.js (dependências)
