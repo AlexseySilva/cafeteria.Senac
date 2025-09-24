@@ -1,44 +1,56 @@
-import axios from 'axios'; // Importa biblioteca Axios para requisições HTTP
-import { log, warn, error } from '@/utils/functions/logger'; // Logger padronizado
+import axios from 'axios';
 
-// Configuração base da API
-const api = axios.create({ // Cria instância configurada do Axios
-  baseURL: 'http://10.53.52.27:3335', // Define URL base do backend AirCNC (IP da máquina para emulador)
-  timeout: 10000, // Define timeout de 10 segundos para requisições
-  headers: { // Define headers padrão para todas as requisições
+// Configuração base da API para comunicação com o backend
+const api = axios.create({
+  baseURL: 'http://192.168.0.241:3335', // URL base do servidor backend (IP da máquina)
+  timeout: 15000, // Timeout de 15 segundos para requisições
+  headers: {
     'Content-Type': 'application/json', // Define tipo de conteúdo como JSON
   },
+  // Configurações adicionais para melhor estabilidade
+  validateStatus: (status) => status < 500, // Aceita códigos de status menores que 500
 });
 
-// Interceptor para adicionar token de autenticação e medir tempo
+// Interceptor para requisições - adiciona logs apenas em desenvolvimento
 api.interceptors.request.use(
   (config) => {
-    (config as any).metadata = { start: Date.now() };
-    const { method, url, params } = config;
-    log('API:request', method?.toUpperCase() + ' ' + url, { params, data: config.data });
+    if (__DEV__) {
+      console.log(`[API] ${config.method?.toUpperCase()} ${config.url}`); // Log da requisição
+    }
     return config;
   },
-  (err) => {
-    error('API:request', 'config error', err);
-    return Promise.reject(err);
+  (error) => {
+    if (__DEV__) {
+      console.error('[API] Erro na requisição:', error.message); // Log de erro na requisição
+    }
+    return Promise.reject(error);
   }
 );
 
-// Interceptor para tratar respostas e erros com tempo total
+// Interceptor para respostas - trata erros globalmente
 api.interceptors.response.use(
   (response) => {
-    const meta = (response.config as any).metadata;
-    const ms = meta?.start ? Date.now() - meta.start : undefined;
-    log('API:response', response.config.method?.toUpperCase() + ' ' + response.config.url, { status: response.status, ms });
+    if (__DEV__) {
+      console.log(`[API] Resposta recebida:`, response.status); // Log da resposta
+    }
     return response;
   },
-  (err) => {
-    const cfg = err.config || {};
-    const meta = (cfg as any).metadata;
-    const ms = meta?.start ? Date.now() - meta.start : undefined;
-    error('API:error', cfg?.method?.toUpperCase() + ' ' + cfg?.url, { ms, data: err.response?.data, message: err.message });
-    return Promise.reject(err);
+  (error) => {
+    // Log simplificado apenas em desenvolvimento
+    if (__DEV__) {
+      const errorMessage = error.response?.data?.message || error.message || 'Erro de conexão';
+      console.warn(`[API] ${errorMessage}`);
+    }
+
+    // Cria erro mais limpo para o frontend
+    const cleanError = new Error(
+      error.response?.data?.message ||
+      error.message ||
+      'Não foi possível conectar ao servidor'
+    );
+
+    return Promise.reject(cleanError);
   }
 );
 
-export default api; // Exporta instância configurada do Axios
+export default api;

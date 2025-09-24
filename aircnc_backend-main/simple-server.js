@@ -18,8 +18,8 @@ const mockProducts = [ // Array com dados estáticos de produtos para teste
         ingredients: ["Espresso", "Milk", "White Chocolate Syrup", "Caramel Drizzle"], // Lista de ingredientes
         cover: "Coffe_1.png", // Nome do arquivo de capa
         thumbnail: "Coffe1.png", // Nome do arquivo de miniatura
-        cover_url: "http://localhost:3335/files/Coffe_1.png", // URL completa da capa
-        thumbnail_url: "http://localhost:3335/files/Coffe1.png", // URL completa da miniatura
+        cover_url: null, // URL da capa (null para usar fallback local)
+        thumbnail_url: null, // URL da miniatura (null para usar fallback local)
         available: true, // Se produto está disponível
         createdAt: new Date().toISOString(), // Data de criação em ISO string
         updatedAt: new Date().toISOString() // Data de atualização em ISO string
@@ -33,8 +33,8 @@ const mockProducts = [ // Array com dados estáticos de produtos para teste
         ingredients: ["Leite vaporizado", "Combinado com uma fina camada final de espuma de leite por cima"], // Lista de ingredientes
         cover: "Coffe_2.png", // Nome do arquivo de capa
         thumbnail: "Coffe2.png", // Nome do arquivo de miniatura
-        cover_url: "http://localhost:3335/files/Coffe_2.png", // URL completa da capa
-        thumbnail_url: "http://localhost:3335/files/Coffe2.png", // URL completa da miniatura
+        cover_url: null, // URL da capa (null para usar fallback local)
+        thumbnail_url: null, // URL da miniatura (null para usar fallback local)
         available: true, // Se produto está disponível
         createdAt: new Date().toISOString(), // Data de criação em ISO string
         updatedAt: new Date().toISOString() // Data de atualização em ISO string
@@ -48,8 +48,8 @@ const mockProducts = [ // Array com dados estáticos de produtos para teste
         ingredients: ["Agua", "Cafe expresso"], // Lista de ingredientes
         cover: "Coffe_3.png", // Nome do arquivo de capa
         thumbnail: "Coffe3.png", // Nome do arquivo de miniatura
-        cover_url: "http://localhost:3335/files/Coffe_3.png", // URL completa da capa
-        thumbnail_url: "http://localhost:3335/files/Coffe3.png", // URL completa da miniatura
+        cover_url: null, // URL da capa (null para usar fallback local)
+        thumbnail_url: null, // URL da miniatura (null para usar fallback local)
         available: true, // Se produto está disponível
         createdAt: new Date().toISOString(), // Data de criação em ISO string
         updatedAt: new Date().toISOString() // Data de atualização em ISO string
@@ -63,8 +63,8 @@ const mockProducts = [ // Array com dados estáticos de produtos para teste
         ingredients: ["Agua", "Leite vaporizado", "Caramelo"], // Lista de ingredientes
         cover: "Coffe_4.png", // Nome do arquivo de capa
         thumbnail: "Coffe4.png", // Nome do arquivo de miniatura
-        cover_url: "http://localhost:3335/files/Coffe_4.png", // URL completa da capa
-        thumbnail_url: "http://localhost:3335/files/Coffe4.png", // URL completa da miniatura
+        cover_url: null, // URL da capa (null para usar fallback local)
+        thumbnail_url: null, // URL da miniatura (null para usar fallback local)
         available: true, // Se produto está disponível
         createdAt: new Date().toISOString(), // Data de criação em ISO string
         updatedAt: new Date().toISOString() // Data de atualização em ISO string
@@ -222,9 +222,10 @@ app.get('/ping', (req, res) => { // Define rota GET para teste de conectividade
 
 // Iniciar servidor
 const port = 3335; // Define porta do servidor
-app.listen(port, () => { // Inicia servidor na porta especificada
+app.listen(port, '0.0.0.0', () => { // Inicia servidor na porta especificada, aceitando conexões de qualquer IP
     console.log(`🚀 Servidor rodando na porta ${port}`); // Loga que servidor iniciou
     console.log(`📱 API disponível em: http://localhost:${port}`); // Loga URL da API
+    console.log(`🌐 API externa em: http://192.168.0.241:${port}`); // Loga URL externa
     console.log(`🧪 Teste: http://localhost:${port}/ping`); // Loga URL de teste
     console.log(`☕ Produtos: http://localhost:${port}/products`); // Loga URL dos produtos
 });

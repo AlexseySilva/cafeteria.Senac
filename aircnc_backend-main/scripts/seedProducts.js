@@ -49,7 +49,7 @@ const productsData = [ // Array com dados dos produtos para popular o banco
 async function seedProducts() { // Função assíncrona para popular banco com produtos
     try { // Bloco try para capturar erros
         // Conectar ao banco de dados
-        const { DB_USER, DB_PASS, DB_NAME } = process.env; // Conectar ao banco de dados
+        const { DB_USER, DB_PASS, DB_NAME } = process.env; // Desestrutura variáveis de ambiente do banco
         const uri = `mongodb+srv://${DB_USER}:${DB_PASS}@api.rmunb.mongodb.net/${DB_NAME}?retryWrites=true&w=majority&appName=API`; // Monta string de conexão MongoDB Atlas
 
         await mongoose.connect(uri); // Conecta ao MongoDB usando a URI montada

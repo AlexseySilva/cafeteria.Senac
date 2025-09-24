@@ -1,103 +1,86 @@
-import { forwardRef } from "react"; // Importa forwardRef para encaminhar referências
-import { log } from "@/utils/functions/logger"; // Logger padronizado
+import React, { forwardRef } from "react";
 
 import {
   TouchableOpacity,
   TouchableOpacityProps,
   ImageProps,
-  Image,
+  ImageSourcePropType,
   View,
   Text,
-  StyleSheet,
 } from "react-native";
 
-import { ProductProps as StaticProductProps } from "@/utils/data/products"; // Importa tipo de produto estático
-import { Product as DynamicProduct } from "@/services/productsService"; // Importa tipo de produto dinâmico
+// Importa componente personalizado para imagens de produtos
+import { ProductThumbnail, LocalProductImage } from "./product-image";
 
-type ProductDataProps = StaticProductProps | DynamicProduct | { // Tipo união para diferentes formatos de produto
-  title: string; // Título do produto
-  description: string | string[]; // Descrição como string ou array
-  thumbnail: ImageProps | string; // Thumbnail como props de imagem ou string
-  price?: number; // Preço opcional
-  quantity?: number; // Quantidade opcional
+// Importa função para formatação de moeda
+import { formatCurrency } from "@/utils/functions/format-currency";
+
+type ProductDataProps = {
+  id: string; // ID do produto
+  title: string; // Nome do produto
+  description: string | string[]; // Descrição (pode ser string ou array)
+  thumbnail: ImageSourcePropType; // Fonte da imagem thumbnail
+  price?: number; // Preço do produto (opcional)
+  quantity?: number; // Quantidade no carrinho (opcional)
+  available?: boolean; // Disponibilidade do produto (opcional)
 };
 
-type ProductProps = TouchableOpacityProps & { // Tipo que estende props do TouchableOpacity
-  data: ProductDataProps; // Dados do produto
+type ProductProps = TouchableOpacityProps & {
+  data: ProductDataProps;
 };
 
-export const Product = forwardRef< // Componente Product com forwardRef
-  React.ComponentRef<typeof TouchableOpacity>, // Tipo da referência
-  ProductProps // Tipo das props
->(({ data, ...rest }, ref) => { // Desestrutura props e referência
-  // Função para obter a fonte da imagem (compatível com ambos os formatos)
-  const getImageSource = () => { // Função para determinar fonte da imagem
-    if (typeof data.thumbnail === 'string') { // Se thumbnail é string (produto da API)
-      // Para produtos dinâmicos, usar URL da API
-      return { uri: (data as any).thumbnail_url || `http://10.53.52.27:3335/files/${data.thumbnail}` }; // Retorna objeto URI (IP da maquina)
-    }
-    // Para produtos estáticos, usar require
-    return data.thumbnail as ImageProps['source']; // Retorna source do require
-  };
+export const Product = React.memo(forwardRef<
+  React.ComponentRef<typeof TouchableOpacity>,
+  ProductProps
+>(({ data, ...rest }, ref) => {
+  // Formata descrição para exibição (converte array em string se necessário)
+  const formattedDescription = Array.isArray(data.description)
+    ? data.description.join('. ')
+    : data.description;
 
-  // Função para obter a descrição (compatível com ambos os formatos)
-  const getDescription = () => { // Função para formatar descrição
-    if (Array.isArray(data.description)) { // Se descrição é array
-      return data.description.join(', '); // Junta elementos com vírgula
-    }
-    return data.description || ''; // Retorna string diretamente ou string vazia se undefined
-  };
-
-  // Função para obter o preço se disponível
-  const getPrice = () => { // Função para formatar preço
-    if ('price' in data && data.price) { // Se produto tem preço
-      return `R$ ${data.price.toFixed(2)}`; // Formata preço com 2 casas decimais
-    }
-    return null; // Retorna null se não tem preço
-  };
-
-  return ( // Retorna JSX do componente
-    <TouchableOpacity // Componente tocável principal
-      ref={ref} // Encaminha referência
-      {...rest} // Espalha demais props
-      onPress={(e) => {
-        try {
-          const id = (data as any).id ?? (data as any)._id ?? undefined;
-          log('ProductCard', 'onPress', { id, title: (data as any).title });
-        } catch {}
-        // Chama o onPress original (se houver)
-        // @ts-ignore
-        rest?.onPress?.(e);
-      }}
+  return (
+    <TouchableOpacity
+      ref={ref}
+      style={{ width: '100%', flexDirection: 'row', alignItems: 'center', paddingBottom: 16 }}
+      {...rest}
     >
-      {/* Envolve todo o conteúdo em uma única <View> para garantir que nenhum texto solto fique direto no Touchable */}
-      <View className="w-full flex-row-reverse items-center pb-4">
-        <Image source={getImageSource()} className="w-20 h-20 rounded-md" resizeMode="contain" /> {/* Imagem do produto (contain para manter proporcao) */}
-
-        <View className="flex-1 ml-3"> {/* Container das informações */}
-          <View className="flex-row items-center"> {/* Container do título e quantidade */}
-            <Text className="text-white font-subtitle text-base flex-1"> {/* Título do produto */}
-              {data.title || 'Produto sem nome'}
-            </Text>
-
-            {data.quantity && ( // Se produto tem quantidade (carrinho)
-              <Text className="text-white font-subtitle text-sm"> {/* Texto da quantidade */}
-                x {data.quantity || 0}
-              </Text>
-            )}
-          </View>
-
-          <Text className="text-slate-400 text-xs leading-5 mt-0.5"> {/* Descrição do produto */}
-            {getDescription()}
+      <View style={{ flex: 1, marginLeft: 12 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Text style={{ color: 'black', fontWeight: '500', fontSize: 16, flex: 1 }}>
+            {data.title}
           </Text>
-
-          {getPrice() && ( // Se produto tem preço
-            <Text className="text-lime-400 font-subtitle text-sm mt-1"> {/* Preço do produto */}
-              {getPrice()}
+          {data.quantity && (
+            <Text style={{ color: 'black', fontWeight: '500', fontSize: 14 }}>
+              x {data.quantity}
             </Text>
           )}
         </View>
+
+        {/* Exibe preço se disponível */}
+        {data.price && (
+          <Text style={{ color: '#f97316', fontWeight: '600', fontSize: 14 }}>
+            {formatCurrency(data.price)}
+          </Text>
+        )}
+
+        <Text style={{ color: 'black', fontSize: 12, lineHeight: 20, marginTop: 2 }}>
+          {formattedDescription}
+        </Text>
+
+        {/* Indicador de indisponibilidade */}
+        {data.available === false && (
+          <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '600', marginTop: 4 }}>
+            Indisponível
+          </Text>
+        )}
       </View>
+
+      {/* Usa componente local para evitar erros de rede */}
+      <LocalProductImage
+        productId={data.id}
+        type="thumbnail"
+        style={{ width: 80, height: 80, borderRadius: 6 }}
+      />
     </TouchableOpacity>
   );
-});
+}));

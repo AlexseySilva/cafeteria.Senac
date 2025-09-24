@@ -1,173 +1,165 @@
-import { Image, Text, View, ActivityIndicator } from "react-native"; // Importa componentes básicos do React Native
+import { Image, Text, View, ActivityIndicator, Alert } from "react-native";
+import { LocalProductImage } from "@/components/product-image";
 
-import { useLocalSearchParams, useNavigation, Redirect } from "expo-router"; // Importa hooks e componentes do Expo Router
+import { useLocalSearchParams, useNavigation, Redirect } from "expo-router";
 
-import { PRODUCTS } from "@/utils/data/products"; // Importa produtos estáticos
-import { useProducts } from "@/hooks/useProducts"; // Importa hook de produtos
-import productsService from "@/services/productsService"; // Importa serviço de produtos
+// Importa serviços locais para buscar produto específico (sem rede)
+import { getProductById, AdaptedProduct } from "@/utils/data/products-local";
 
-import { formatCurrency } from "@/utils/functions/format-currency"; // Importa função de formatação de moeda
+import { formatCurrency } from "@/utils/functions/format-currency";
 
-import { Button } from "@/components/button"; // Importa componente de botão
+import { Button } from "@/components/button";
 
-import { Feather } from "@expo/vector-icons"; // Importa ícones Feather
+import { Feather } from "@expo/vector-icons";
 
-import { LinkButton } from "@/components/link-button"; // Importa componente de botão com link
-import { log, warn, error } from "@/utils/functions/logger"; // Logger padronizado
+import { LinkButton } from "@/components/link-button";
 
-import { useCartStore } from "@/stores/cart-store"; // Importa store do carrinho
+import { useCartStore } from "@/stores/cart-store";
 
-import { useState, useEffect } from "react"; // Importa hooks do React
+import { useState, useEffect } from "react";
 
-export default function Product() { // Componente da página de detalhes do produto
-  const cartStore = useCartStore(); // Obtém instância do store do carrinho
-  const navigation = useNavigation(); // Obtém instância da navegação
-  const { id } = useLocalSearchParams(); // Obtém ID do produto dos parâmetros da URL
-  const { products } = useProducts(); // Obtém produtos do hook
+export default function Product() {
+  const cartStore = useCartStore();
+  const navigation = useNavigation();
+  const { id } = useLocalSearchParams();
 
-  const [product, setProduct] = useState(null); // Estado para armazenar produto atual
-  const [loading, setLoading] = useState(true); // Estado de carregamento
-  const [error, setError] = useState(null); // Estado de erro
+  // Estados para gerenciar produto da API
+  const [product, setProduct] = useState<AdaptedProduct | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => { // Hook de efeito para carregar produto
-    log('ProductScreen', 'mount', { id });
+  // Effect para carregar produto quando componente monta
+  useEffect(() => {
+    loadProduct();
+  }, [id]);
 
-    async function loadProduct() { // Função assíncrona para carregar produto
-      try { // Bloco try para capturar erros
-        setLoading(true); // Define loading como true
+  // Função para carregar produto (local, sem rede)
+  const loadProduct = () => {
+    if (!id || typeof id !== 'string') {
+      setError('ID do produto inválido');
+      setLoading(false);
+      return;
+    }
 
-        // Primeiro tentar buscar nos produtos estáticos
-        const staticProduct = PRODUCTS.find((item) => item.id === id); // Busca produto nos dados estáticos
-        if (staticProduct) { // Se encontrou produto estático
-          log('ProductScreen', 'found static product', { id });
-          setProduct(staticProduct); // Define produto encontrado
-          setLoading(false); // Para o loading
-          return; // Sai da função
+    try {
+      setLoading(true);
+      setError(null);
+
+      const foundProduct = getProductById(id); // Busca produto local
+
+      if (foundProduct) {
+        setProduct(foundProduct); // Define produto no estado
+        if (__DEV__) {
+          console.log(`[Product] Produto carregado: ${foundProduct.title}`); // Log de sucesso
         }
-
-        // Se não encontrar, tentar buscar nos produtos dinâmicos
-        const dynamicProduct = products.find((item) => item._id === id); // Busca produto nos dados dinâmicos
-        if (dynamicProduct) { // Se encontrou produto dinâmico
-          log('ProductScreen', 'found dynamic product', { id });
-          setProduct(dynamicProduct); // Define produto encontrado
-          setLoading(false); // Para o loading
-          return; // Sai da função
-        }
-
-        // Se ainda não encontrar, tentar buscar diretamente da API
-        if (typeof id === 'string' && id.length === 24) { // Verifica se ID é ObjectId do MongoDB
-          log('ProductScreen', 'fetch product by id from API', { id });
-          const apiProduct = await productsService.getProductById(id); // Busca produto na API
-          setProduct(apiProduct); // Define produto da API
-        } else { // Se ID não é válido
-          warn('ProductScreen', 'invalid id format', { id });
-          setError('Produto não encontrado'); // Define erro
-        }
-      } catch (err) { // Captura erros
-        error('ProductScreen', 'loadProduct failed', err); // Loga erro no console
-        setError('Erro ao carregar produto'); // Define mensagem de erro
-      } finally { // Bloco finally sempre executa
-        setLoading(false); // Para o loading
+      } else {
+        setError('Produto não encontrado');
       }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
+      setError(errorMessage); // Define erro no estado
+      if (__DEV__) {
+        console.error('[Product] Erro ao carregar produto:', errorMessage); // Log do erro
+      }
+    } finally {
+      setLoading(false); // Finaliza carregamento
     }
+  };
 
-    if (id) { // Se há ID do produto
-      loadProduct(); // Carrega produto
-    }
-  }, [id, products]); // Dependências do useEffect
+  function handleAddToCart() {
+    if (!product) return; // Verifica se produto existe
 
-  function handleAddToCart() { // Função para adicionar produto ao carrinho
-    log('ProductScreen', 'add to cart pressed', { id });
-    if (product) { // Se há produto
-      cartStore.add(product); // Adiciona produto ao carrinho
-      navigation.goBack(); // Volta para tela anterior
-    }
+    cartStore.add(product); // Adiciona produto ao carrinho
+    navigation.goBack(); // Volta para tela anterior
   }
 
-  if (loading) { // Se está carregando
-    return ( // Retorna tela de loading
-      <View className="flex-1 justify-center items-center"> {/* Container centralizado */}
-        <ActivityIndicator size="large" color="#C47F17" /> {/* Indicador de carregamento */}
-        <Text className="text-white mt-4">Carregando produto...</Text> {/* Texto de carregamento */}
+  // Exibe indicador de carregamento
+  if (loading) {
+    return (
+      <View className="flex-1 justify-center items-center">
+        <ActivityIndicator size="large" color="#C7410B" />
+        <Text className="text-black mt-4">Carregando produto...</Text>
       </View>
     );
   }
 
-  if (error || !product) { // Se há erro ou não há produto
-    return <Redirect href={"/"} />; // Redireciona para home
+  // Exibe mensagem de erro
+  if (error || !product) {
+    return (
+      <View className="flex-1 justify-center items-center px-8">
+        <Text className="text-black text-center mb-4">
+          {error || 'Produto não encontrado'}
+        </Text>
+        <LinkButton title="Voltar ao cardápio" href={"/"} />
+      </View>
+    );
   }
 
-  // Função para obter a fonte da imagem de capa
-  const getCoverSource = () => { // Função para determinar fonte da imagem de capa
-    if (typeof product.cover === 'string') { // Se capa é string (produto da API)
-      // Para produtos dinâmicos, usar URL da API
-      return { uri: product.cover_url || `http://10.53.52.27:3335/files/${product.cover}` }; // Retorna objeto URI (IP da maquina)
-    }
-    // Para produtos estáticos, usar require
-    return product.cover; // Retorna source do require
-  };
-
-  // Função para obter a descrição
-  const getDescription = () => { // Função para formatar descrição
-    if (Array.isArray(product.description)) { // Se descrição é array
-      return product.description.join(', '); // Junta elementos com vírgula
-    }
-    return product.description || ''; // Retorna string diretamente ou string vazia se undefined
-  };
-
-  // Função para obter o preço
-  const getPrice = () => { // Função para formatar preço
-    if ('price' in product && product.price) { // Se produto tem preço
-      return formatCurrency(product.price); // Formata preço como moeda
-    }
-    return null; // Retorna null se não tem preço
-  };
-
-  return ( // Retorna JSX da tela de produto
-    <View className="flex-1"> {/* Container principal */}
-      <Image // Imagem de capa do produto
-        source={getCoverSource()} // Fonte da imagem (estática ou dinâmica)
-        className="w-full h-52" // Largura total e altura fixa
-        resizeMode="cover" // Modo de redimensionamento
+  return (
+    <View className="flex-1">
+      <LocalProductImage
+        productId={product.id}
+        type="cover"
+        className="w-full h-52"
+        resizeMode="cover"
       />
 
-      <View className="p-5 mt-8 flex-1"> {/* Container do conteúdo com padding */}
-        <View className="flex-row justify-between items-start mb-2"> {/* Header com título e preço */}
-          <Text className="text-white text-xl font-heading flex-1">{product.title || 'Produto sem nome'}</Text> {/* Título do produto */}
-          {getPrice() && ( // Se há preço
-            <Text className="text-lime-400 text-xl font-heading">{getPrice()}</Text> // Preço formatado
-          )}
-        </View>
+      <View className="p-5 mt-8 flex-1">
+        <Text className="text-black text-xl font-heading">{product.title}</Text>
 
-        <Text className="text-slate-400 font-body text-base leading-6 mb-6"> {/* Descrição do produto */}
-          {getDescription()} {/* Descrição formatada */}
+        {/* Exibe preço se disponível */}
+        {product.price && (
+          <Text className="text-orange-500 text-lg font-semibold mb-2">
+            {formatCurrency(product.price)}
+          </Text>
+        )}
+
+        {/* Exibe descrição como array ou string */}
+        <Text className="text-black font-body text-base leading-6 mb-6">
+          {Array.isArray(product.description)
+            ? product.description.join('. ')
+            : product.description}
         </Text>
 
-        {product.ingredients && product.ingredients.length > 0 && ( // Se há ingredientes
-          <> {/* Fragment para agrupar elementos */}
-            <Text className="text-white font-heading text-lg mb-3">Ingredientes:</Text> {/* Título da seção */}
-            {product.ingredients.map((ingredient, index) => ( // Mapeia ingredientes
-              <Text // Texto de cada ingrediente
-                key={`${ingredient || 'ingredient'}-${index}`} // Chave única
-                className="text-slate-300 font-body text-base leading-6" // Estilos do texto
+        {/* Lista de ingredientes */}
+        {product.ingredients && product.ingredients.length > 0 && (
+          <>
+            <Text className="text-black font-heading text-lg mb-2">Ingredientes:</Text>
+            {product.ingredients.map((ingredient, index) => (
+              <Text
+                key={`${ingredient}-${index}`}
+                className="text-black font-body text-base leading-6"
               >
-                {"\u2022"} {ingredient || 'Ingrediente'} {/* Bullet point e nome do ingrediente */}
+                {"\u2022"} {ingredient}
               </Text>
             ))}
           </>
         )}
+
+        {/* Indicador de disponibilidade */}
+        {!product.available && (
+          <Text className="text-red-500 font-semibold mt-4">
+            Produto temporariamente indisponível
+          </Text>
+        )}
       </View>
 
-      <View className="p-5 pb-8 gap-5 items-center"> {/* Container dos botões */}
-        <Button onPress={handleAddToCart} className="w-[90%] self-center"> {/* Botão de adicionar ao carrinho */}
-          <Button.Icon> {/* Ícone do botão */}
-            <Feather name="plus-circle" size={20} /> {/* Ícone de adicionar */}
+      <View className="p-5 pb-8 gap-5 items-center">
+        <Button
+          onPress={handleAddToCart}
+          className="w-[90%] self-center"
+          disabled={!product.available} // Desabilita se produto indisponível
+        >
+          <Button.Icon>
+            <Feather name="plus-circle" size={20} />
           </Button.Icon>
-          <Button.Text>Adicionar ao pedido</Button.Text> {/* Texto do botão */}
+          <Button.Text>
+            {product.available ? 'Adicionar ao pedido' : 'Indisponível'}
+          </Button.Text>
         </Button>
 
-        <LinkButton title="Voltar ao cardápio" href={"/"} /> {/* Botão para voltar */}
+        <LinkButton title="Voltar ao cardápio" href={"/"} />
       </View>
     </View>
   );
-} // Fim do componente
+}

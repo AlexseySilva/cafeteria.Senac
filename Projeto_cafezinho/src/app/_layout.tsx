@@ -1,7 +1,5 @@
-import React, { useEffect } from "react";
 import { Slot } from "expo-router";
-import { View } from "react-native";
-import { log } from "@/utils/functions/logger";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   useFonts,
@@ -21,21 +19,13 @@ export default function Layout() {
     Inter_700Bold,
   });
 
-  useEffect(() => {
-    log('Layout', 'mounted');
-  }, []);
-
   if (!fontsLoaded) {
     return <Loading />;
   }
 
   return (
-    <View style={{
-      flex: 1,
-      backgroundColor: '#0f172a',
-      paddingTop: 40
-    }}>
+    <SafeAreaView style={{ backgroundColor: 'white', flex: 1 }}>
       <Slot />
-    </View>
+    </SafeAreaView>
   );
 }

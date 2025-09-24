@@ -1,237 +1,304 @@
-// Pagina carrinho
+import { View, Text, ScrollView, Alert, Linking, ActivityIndicator } from "react-native";
 
-import { View, Text, ScrollView, Alert, Linking } from "react-native"; // Importa componentes básicos do React Native
-import { useEffect } from "react"; // Hook de efeito
-import { log } from "@/utils/functions/logger"; // Logger padronizado
+import { Header } from "@/components/header";
 
-import { Header } from "@/components/header"; // Importa componente de cabeçalho
+import { productCartProps, useCartStore } from "@/stores/cart-store";
 
-import { CartProduct, useCartStore } from "@/stores/cart-store"; // Importa tipo e store do carrinho
-import { useOrders } from "@/hooks/useOrders"; // Importa hook para operações com pedidos
+import { Product } from "@/components/products";
 
-import { Product } from "@/components/products"; // Importa componente de produto
+import { formatCurrency } from "@/utils/functions/format-currency";
 
-import { formatCurrency } from "@/utils/functions/format-currency"; // Importa função para formatar moeda
+import { Input } from "@/components/input";
 
-import { Input } from "@/components/input"; // Importa componente de input
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 
-import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view"; // Importa scroll view que evita teclado
+import { Button } from "@/components/button";
 
-import { Button } from "@/components/button"; // Importa componente de botão
+import { Feather } from "@expo/vector-icons";
 
-import { Feather } from "@expo/vector-icons"; // Importa ícones Feather
+import { LinkButton } from "@/components/link-button";
 
-import { LinkButton } from "@/components/link-button"; // Importa componente de botão com link
+import { useState, useEffect } from "react";
 
-import { useState } from "react"; // Importa hook de estado do React
+import { useNavigation } from "expo-router";
 
-import { useNavigation } from "expo-router"; // Importa hook de navegação
+// Importa serviços para pedidos e usuários (versão local)
+import { createOrder, convertCartItemsToOrderItems, validateOrderData } from "@/services/orders-local";
+import { getCurrentUserId, getUserFromStorage, createOrLoginUser } from "@/services/user-local";
 
-const PHONE_NUMBER = "5519988414402"; // Constante com número do WhatsApp
+const PHONE_NUMBER = "5519988414402";
 
-export default function Cart() { // Componente principal da tela do carrinho
-  const [address, setAddress] = useState(""); // Estado para endereço de entrega
-  const [customerName, setCustomerName] = useState(""); // Estado para nome do cliente
-  const [customerPhone, setCustomerPhone] = useState(""); // Estado para telefone do cliente
-  const [useBackend, setUseBackend] = useState(false); // Estado para alternar entre backend e WhatsApp
+export default function Cart() {
+  const [address, setAddress] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
-  const cartStore = useCartStore(); // Obtém instância do store do carrinho
-  const { createOrder, loading } = useOrders(); // Desestrutura função e estado do hook de pedidos
-  const navigation = useNavigation(); // Obtém instância da navegação
+  const cartStore = useCartStore();
+  const navigation = useNavigation();
 
+  // Calcula total usando função do store
+  const total = formatCurrency(cartStore.getTotalPrice());
+
+  // Effect para carregar dados do usuário
   useEffect(() => {
-    log('Cart', 'mounted', { items: cartStore.products.length });
+    loadUserData();
   }, []);
 
-  const total = formatCurrency(cartStore.getTotalPrice()); // Calcula e formata total do carrinho
+  // Função para carregar dados do usuário
+  const loadUserData = async () => {
+    try {
+      const user = await getUserFromStorage(); // Busca usuário salvo
+      if (user) {
+        setUserId(user.id); // Define ID do usuário
+        setCustomerName(user.name || ''); // Define nome se disponível
+      }
+    } catch (error) {
+      console.error('Erro ao carregar dados do usuário:', error); // Log do erro
+    }
+  };
 
-  // Função para obter ID do produto (compatível com ambos os formatos)
-  function getProductId(product: CartProduct): string { // Função para extrair ID do produto
-    return 'id' in product ? product.id : product._id; // Retorna 'id' se for produto estático ou '_id' se for da API
-  }
-
-  function handleProductRemove(product: CartProduct) { // Função para remover produto do carrinho
-    Alert.alert("Remover", `Deseja remover ${product.title} do carrinho?`, [ // Mostra alerta de confirmação
-      { // Opção cancelar
+  function handleProductRemove(product: productCartProps) {
+    Alert.alert("Remover", `Deseja remover ${product.title} do carrinho?`, [
+      {
         text: "Cancelar",
       },
-      { // Opção remover
+      {
         text: "Remover",
-        onPress: () => cartStore.remove(getProductId(product)), // Remove produto do carrinho
+        onPress: () => cartStore.remove(product.id),
       },
     ]);
   }
 
-  async function handleOrderBackend() { // Função assíncrona para criar pedido via backend
-    if (!customerName.trim()) { // Valida se nome do cliente foi preenchido
-      return Alert.alert("Atenção", "Nome do cliente é obrigatório!"); // Mostra alerta se nome vazio
+  // Função para criar usuário se necessário
+  const ensureUserExists = async (): Promise<string> => {
+    if (userId) {
+      return userId; // Retorna ID existente
     }
 
-    if (cartStore.products.length === 0) { // Valida se carrinho não está vazio
-      return Alert.alert("Atenção", "Carrinho está vazio!"); // Mostra alerta se carrinho vazio
+    // Se não há usuário, cria um temporário
+    if (!customerName.trim()) {
+      throw new Error('Nome do cliente é obrigatório');
     }
 
-    try { // Bloco try para capturar erros
-      const orderData = { // Objeto com dados do pedido
-        user_id: "60d5ecb74f8a8b001f5e4e1a", // ID temporário do usuário (hardcoded)
-        items: cartStore.products.map(product => ({ // Mapeia produtos do carrinho para formato da API
-          product_id: getProductId(product), // ID do produto
-          quantity: product.quantity // Quantidade do produto
-        })),
-        customerName: customerName.trim(), // Nome do cliente sem espaços extras
-        customerPhone: customerPhone.trim() || undefined, // Telefone ou undefined se vazio
-        notes: address.trim() || undefined // Observações ou undefined se vazio
+    const user = await createOrLoginUser({
+      email: `cliente_${Date.now()}@temp.com`, // Email temporário
+      name: customerName.trim(),
+    });
+
+    setUserId(user.id); // Salva ID do usuário criado
+    return user.id;
+  };
+
+  // Função para processar pedido (integração com backend)
+  async function handleOrder() {
+    // Validações básicas
+    if (cartStore.products.length === 0) {
+      return Alert.alert("Atenção", "Carrinho está vazio!");
+    }
+
+    if (!customerName.trim()) {
+      return Alert.alert("Atenção", "Nome do cliente é obrigatório!");
+    }
+
+    if (address.trim().length === 0) {
+      return Alert.alert("Atenção", "Endereço de entrega é obrigatório!");
+    }
+
+    try {
+      setLoading(true); // Inicia carregamento
+
+      if (__DEV__) {
+        console.log('[Cart] Iniciando criação de pedido...');
+        console.log('[Cart] Itens no carrinho:', cartStore.products.length);
+      }
+
+      // Garante que usuário existe
+      const currentUserId = await ensureUserExists();
+
+      if (__DEV__) {
+        console.log('[Cart] Usuário garantido:', currentUserId);
+      }
+
+      // Converte itens do carrinho para formato do backend
+      const orderItems = convertCartItemsToOrderItems(cartStore.products);
+
+      if (__DEV__) {
+        console.log('[Cart] Itens convertidos:', orderItems);
+      }
+
+      // Dados do pedido
+      const orderData = {
+        user_id: currentUserId,
+        items: orderItems,
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim() || undefined,
+        notes: `Entregar em: ${address.trim()}`, // Endereço nas observações
       };
 
-      const order = await createOrder(orderData); // Cria pedido via API
-
-      if (order) { // Se pedido foi criado com sucesso
-        Alert.alert( // Mostra alerta de sucesso
-          "Pedido Criado!",
-          `Seu pedido #${order.orderNumber} foi criado com sucesso!`,
-          [ // Opções do alerta
-            {
-              text: "OK",
-              onPress: () => { // Ao pressionar OK
-                cartStore.clear(); // Limpa carrinho
-                navigation.goBack(); // Volta para tela anterior
-              }
-            }
-          ]
-        );
+      if (__DEV__) {
+        console.log('[Cart] Dados do pedido:', orderData);
       }
-    } catch (error) { // Captura erros da criação do pedido
-      Alert.alert("Erro", "Não foi possível criar o pedido. Tente novamente."); // Mostra alerta de erro
+
+      // Valida dados antes de enviar
+      const validationErrors = validateOrderData(orderData);
+      if (validationErrors.length > 0) {
+        if (__DEV__) {
+          console.log('[Cart] Erros de validação:', validationErrors);
+        }
+        return Alert.alert("Erro de Validação", validationErrors.join('\n'));
+      }
+
+      if (__DEV__) {
+        console.log('[Cart] Criando pedido...');
+      }
+
+      // Cria pedido (local)
+      const createdOrder = await createOrder(orderData);
+
+      if (__DEV__) {
+        console.log('[Cart] Pedido criado com sucesso:', createdOrder.orderNumber);
+      }
+
+      // Sucesso - mostra confirmação
+      Alert.alert(
+        "Pedido Criado!",
+        `Seu pedido ${createdOrder.orderNumber} foi criado com sucesso!\n\nTotal: ${formatCurrency(createdOrder.totalAmount)}`,
+        [
+          {
+            text: "Enviar por WhatsApp",
+            onPress: () => sendWhatsAppMessage(createdOrder),
+          },
+          {
+            text: "OK",
+            onPress: () => {
+              cartStore.clear(); // Limpa carrinho
+              navigation.goBack(); // Volta para tela anterior
+            },
+          },
+        ]
+      );
+
+    } catch (error) {
+      console.error('Erro ao criar pedido:', error); // Log do erro
+
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      Alert.alert("Erro", `Não foi possível criar o pedido: ${errorMessage}`);
+    } finally {
+      setLoading(false); // Finaliza carregamento
     }
   }
 
-  function handleOrderWhatsApp() { // Função para enviar pedido via WhatsApp
-    if (address.trim().length === 0) { // Valida se endereço foi preenchido
-      return Alert.alert("Atenção", "Deve ser informado o endereço!"); // Mostra alerta se endereço vazio
-    }
+  // Função para enviar mensagem via WhatsApp (mantém funcionalidade original)
+  function sendWhatsAppMessage(order: any) {
+    const products = cartStore.products
+      .map((product) => `\n ${product.quantity}x ${product.title} - ${formatCurrency(product.price)}`)
+      .join("");
 
-    const products = cartStore.products // Formata lista de produtos
-      .map((product) => `\n ${product.quantity} ${product.title}`) // Mapeia cada produto para string
-      .join(""); // Junta todos em uma string
+    const message = `
+🍔 NOVO PEDIDO #${order.orderNumber}
 
-    const message = ` // Template da mensagem do WhatsApp
-    ☕ NOVO PEDIDO
-    \n Entregar em ${address}
+👤 Cliente: ${customerName}
+📱 Telefone: ${customerPhone || 'Não informado'}
+📍 Entregar em: ${address}
 
-    ${products}
+📋 Itens:${products}
 
-    \n Valor total: ${total}`;
+💰 Valor total: ${formatCurrency(order.totalAmount)}`;
 
-    Linking.openURL( // Abre WhatsApp com mensagem pré-formatada
-      `http://api.whatsapp.com/send?phone=${PHONE_NUMBER}&text=${message}`
+    Linking.openURL(
+      `http://api.whatsapp.com/send?phone=${PHONE_NUMBER}&text=${encodeURIComponent(message)}`
     );
 
-    cartStore.clear(); // Limpa carrinho
+    cartStore.clear(); // Limpa carrinho após envio
     navigation.goBack(); // Volta para tela anterior
   }
 
-  function handleOrder() { // Função para decidir qual método de pedido usar
-    if (useBackend) { // Se deve usar backend
-      handleOrderBackend(); // Chama função do backend
-    } else { // Se deve usar WhatsApp
-      handleOrderWhatsApp(); // Chama função do WhatsApp
-    }
-  }
-
-  return ( // Retorna JSX da interface do carrinho
-    <View className="flex-1 pt-8"> {/* Container principal */}
-      <KeyboardAwareScrollView // ScrollView que evita sobreposição do teclado
-        showsHorizontalScrollIndicator={false} // Oculta indicador de scroll horizontal
-        extraHeight={100} // Altura extra para evitar teclado
+  return (
+    <View style={{ flex: 1, paddingTop: 32 }}>
+      <KeyboardAwareScrollView
+        showsHorizontalScrollIndicator={false}
+        extraHeight={100}
       >
-        <Header title="Seu Carrinho" /> {/* Cabeçalho da tela */}
-        <ScrollView> {/* ScrollView interno para conteúdo */}
-          <View className="p-5 flex-1"> {/* Container com padding */}
-            {cartStore.products.length > 0 ? ( // Se há produtos no carrinho
-              <View className="border-b border-slate-700"> {/* Container com borda inferior */}
-                {cartStore.products.map((product) => ( // Mapeia produtos do carrinho
-                  <Product // Componente de produto
-                    key={getProductId(product)} // Chave única para React
-                    data={product} // Dados do produto
-                    onPress={() => handleProductRemove(product)} // Função ao pressionar (remover)
+        <Header title="Seu Carrinho" />
+        <ScrollView>
+          <View style={{ padding: 20, flex: 1 }}>
+            {cartStore.products.length > 0 ? (
+              <View style={{ borderBottomWidth: 1, borderBottomColor: '#e2e8f0' }}>
+                {cartStore.products.map((product) => (
+                  <Product
+                    key={product.id}
+                    data={product}
+                    onPress={() => handleProductRemove(product)}
                   />
                 ))}
               </View>
-            ) : ( // Se carrinho está vazio
-              <Text className="font-body text-white text-center my-8"> {/* Texto centralizado */}
+            ) : (
+              <Text style={{ textAlign: 'center', marginVertical: 32, color: '#000' }}>
                 Seu carrinho está vazio
               </Text>
             )}
 
-            <View className="flex-row gap-2 items-center mt-5 mb-4"> {/* Container do total */}
-              <Text className="text-white text-xl font-subtitle">Total</Text> {/* Label do total */}
-              <Text className="text-lime-400 text-2xl font-heading"> {/* Valor do total */}
+            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 20, marginBottom: 16 }}>
+              <Text style={{ color: 'white', fontSize: 20, fontWeight: '600' }}>Total</Text>
+              <Text style={{ color: '#84cc16', fontSize: 24, fontWeight: 'bold' }}>
                 {total}
               </Text>
             </View>
 
-            {useBackend ? ( // Se está usando backend
-              <> {/* Fragment para múltiplos inputs */}
-                <Input // Input para nome
-                  placeholder="Nome completo" // Placeholder do input
-                  onChangeText={setCustomerName} // Função ao mudar texto
-                  value={customerName} // Valor atual
-                  returnKeyType="next" // Tipo da tecla return
-                />
-                <Input // Input para telefone
-                  placeholder="Telefone (opcional)" // Placeholder do input
-                  onChangeText={setCustomerPhone} // Função ao mudar texto
-                  value={customerPhone} // Valor atual
-                  returnKeyType="next" // Tipo da tecla return
-                />
-                <Input // Input para observações
-                  placeholder="Observações (endereço, etc.)" // Placeholder do input
-                  onChangeText={setAddress} // Função ao mudar texto
-                  value={address} // Valor atual
-                  onSubmitEditing={handleOrder} // Função ao submeter
-                  submitBehavior="blurAndSubmit" // Comportamento ao submeter
-                  returnKeyType="send" // Tipo da tecla return
-                />
-              </>
-            ) : ( // Se está usando WhatsApp
-              <Input // Input único para endereço
-                placeholder="Informe o endereço de entrega com rua, bairro, CEP, número e complemento" // Placeholder detalhado
-                onChangeText={setAddress} // Função ao mudar texto
-                value={address} // Valor atual
-                onSubmitEditing={handleOrder} // Função ao submeter
-                submitBehavior="blurAndSubmit" // Comportamento ao submeter
-                returnKeyType="send" // Tipo da tecla return
+            {/* Campos de informações do cliente */}
+            <View style={{ gap: 12, marginBottom: 16 }}>
+              <Input
+                placeholder="Nome completo do cliente *"
+                value={customerName}
+                onChangeText={setCustomerName}
+                returnKeyType="next"
               />
-            )}
 
-            <View className="flex-row items-center mt-4 mb-2"> {/* Container do toggle */}
-              <Text className="text-white mr-3">Usar sistema de pedidos:</Text> {/* Label do toggle */}
-              <Button // Botão para alternar modo
-                onPress={() => setUseBackend(!useBackend)} // Inverte estado do backend
-                className={`px-4 py-2 ${useBackend ? 'bg-lime-600' : 'bg-slate-600'}`} // Classes condicionais
-              >
-                <Button.Text>{useBackend ? 'SIM' : 'NÃO'}</Button.Text> {/* Texto do botão */}
-              </Button>
+              <Input
+                placeholder="Telefone do cliente (opcional)"
+                value={customerPhone}
+                onChangeText={setCustomerPhone}
+                keyboardType="phone-pad"
+                returnKeyType="next"
+              />
+
+              <Input
+                placeholder="Endereço completo de entrega *"
+                value={address}
+                onChangeText={setAddress}
+                onSubmitEditing={handleOrder}
+                submitBehavior="blurAndSubmit"
+                returnKeyType="send"
+                multiline
+                numberOfLines={3}
+              />
             </View>
           </View>
         </ScrollView>
       </KeyboardAwareScrollView>
 
-      <View className="p-5 gap-5"> {/* Container dos botões inferiores */}
-        <Button // Botão principal para enviar pedido
-          onPress={handleOrder} // Função ao pressionar
-          disabled={loading} // Desabilita se está carregando
-          className={loading ? 'opacity-50' : ''} // Reduz opacidade se carregando
+      <View style={{ padding: 20, gap: 20 }}>
+        <Button
+          onPress={handleOrder}
+          disabled={loading || cartStore.products.length === 0}
         >
-          <Button.Text> {/* Texto do botão */}
-            {loading ? 'Enviando...' : 'Enviar pedido'} {/* Texto condicional */}
-          </Button.Text>
-          <Button.Icon> {/* Ícone do botão */}
-            <Feather name="arrow-right-circle" size={20} /> {/* Ícone de seta */}
-          </Button.Icon>
+          {loading ? (
+            <ActivityIndicator color="white" size="small" />
+          ) : (
+            <>
+              <Button.Text>
+                {cartStore.products.length === 0 ? 'Carrinho vazio' : 'Criar pedido'}
+              </Button.Text>
+              <Button.Icon>
+                <Feather name="arrow-right-circle" size={20} />
+              </Button.Icon>
+            </>
+          )}
         </Button>
 
-        <LinkButton title="Voltar ao cardápio" href={"/"} /> {/* Botão para voltar */}
+        <LinkButton title="Voltar ao cardápio" href={"/"} />
       </View>
     </View>
   );

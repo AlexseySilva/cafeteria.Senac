@@ -67,8 +67,8 @@ app.get('/ping', (req, res) => { // Define rota GET para teste de conectividade
 
 async function startDatabase(){ // Função assíncrona para inicializar conexão com banco de dados
     const { DB_USER, DB_PASS, DB_NAME, DB_CLUSTER1, DB_CLUSTER2 } = process.env // Desestrutura variáveis de ambiente do banco
-    const uri = `mongodb+srv://${DB_USER}:${DB_PASS}@apijacinto.dizjg95.mongodb.net/${DB_NAME}?retryWrites=true&w=majority&appName=ApiJacinto`; // Monta string de conexão MongoDB Atlas
-    //mongodb+srv://Alexsey:<db_password>@apijacinto.dizjg95.mongodb.net/?retryWrites=true&w=majority&appName=ApiJacinto
+    const uri = `mongodb+srv://${DB_USER}:${DB_PASS}@api.rmunb.mongodb.net/${DB_NAME}?retryWrites=true&w=majority&appName=API`; // Monta string de conexão MongoDB Atlas
+
     try { // Bloco try para capturar erros de conexão
         await mongoose.connect(uri); // Conecta ao MongoDB usando a URI montada
         console.log('Conectado ao MongoDBAtlas'); // Loga sucesso na conexão

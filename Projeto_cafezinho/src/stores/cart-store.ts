@@ -1,61 +1,68 @@
-import { create } from "zustand"; // Importa função create da biblioteca Zustand para gerenciamento de estado
+import { create } from "zustand";
 
-import { ProductProps } from "@/utils/data/products"; // Importa tipo de produto estático
-import { Product } from "@/services/productsService"; // Importa tipo de produto dinâmico da API
+// Importa tipos de produtos da API
+import { ProductProps } from "@/utils/data/products-api";
 
-import * as cartInMemory from "./helpers/cart-in-memory"; // Importa funções helper para manipulação do carrinho em memória
+import * as cartInMemory from "./helpers/cart-in-memory";
 
-import AsyncStorage from "@react-native-async-storage/async-storage"; // Importa AsyncStorage para persistência local
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import { createJSONStorage, persist } from "zustand/middleware"; // Importa middlewares do Zustand para persistência
+import { createJSONStorage, persist } from "zustand/middleware";
 
-// Tipo compatível com ambos os formatos (estático e dinâmico)
-export type CartProduct = (ProductProps | Product) & { // Define tipo que aceita produto estático ou dinâmico
-  quantity: number; // Adiciona propriedade quantity ao produto
+// Tipo para produto no carrinho (inclui quantidade e preço)
+export type productCartProps = ProductProps & {
+  quantity: number;
+  price: number; // Adiciona preço obrigatório para cálculos
 };
 
-type StateProps = { // Define interface do estado do carrinho
-  products: CartProduct[]; // Array de produtos no carrinho
-  add: (product: ProductProps | Product) => void; // Função para adicionar produto
-  remove: (productId: string) => void; // Função para remover produto por ID
+type StateProps = {
+  products: productCartProps[]; // Array de produtos no carrinho
+  add: (product: ProductProps) => void; // Função para adicionar produto
+  remove: (productId: string) => void; // Função para remover produto
   clear: () => void; // Função para limpar carrinho
   getTotalPrice: () => number; // Função para calcular preço total
   getTotalItems: () => number; // Função para contar total de itens
 };
 
-export const useCartStore = create( // Cria store do Zustand
-  persist<StateProps>( // Aplica middleware de persistência
-    (set, get) => ({ // Função que define estado e ações
-      products: [], // Estado inicial: array vazio de produtos
+export const useCartStore = create(
+  persist<StateProps>(
+    (set, get) => ({
+      products: [], // Array de produtos no carrinho
 
-      add: (product: ProductProps | Product) => // Ação para adicionar produto ao carrinho
-        set((state) => ({ // Atualiza estado
-          products: cartInMemory.add(state.products, product), // Usa helper para adicionar produto
+      // Função para adicionar produto ao carrinho
+      add: (product: ProductProps) =>
+        set((state) => ({
+          products: cartInMemory.add(state.products, product),
         })),
 
-      remove: (productId: string) => // Ação para remover produto do carrinho
-        set((state) => ({ // Atualiza estado
-          products: cartInMemory.remove(state.products, productId), // Usa helper para remover produto
+      // Função para remover produto do carrinho
+      remove: (productId: string) =>
+        set((state) => ({
+          products: cartInMemory.remove(state.products, productId),
         })),
 
-      clear: () => set(() => ({ products: [] })), // Ação para limpar carrinho (reseta para array vazio)
+      // Função para limpar todo o carrinho
+      clear: () => set(() => ({ products: [] })),
 
-      getTotalPrice: () => { // Função para calcular preço total do carrinho
-        const { products } = get(); // Obtém produtos do estado atual
-        return products.reduce((total, product) => { // Reduz array para somar preços
-          const price = 'price' in product ? product.price : 0; // Verifica se produto tem preço
-          return total + (price * product.quantity); // Soma preço multiplicado pela quantidade
-        }, 0); // Valor inicial da soma é 0
+      // Função para calcular preço total do carrinho
+      getTotalPrice: () => {
+        const { products } = get(); // Obtém produtos atuais
+        return products.reduce((total, product) => {
+          return total + (product.price * product.quantity); // Soma preço * quantidade
+        }, 0);
       },
 
-      getTotalItems: () => { // Função para contar total de itens no carrinho
-        const { products } = get(); // Obtém produtos do estado atual
-        return products.reduce((total, product) => total + product.quantity, 0); // Soma todas as quantidades
+      // Função para contar total de itens no carrinho
+      getTotalItems: () => {
+        const { products } = get(); // Obtém produtos atuais
+        return products.reduce((total, product) => {
+          return total + product.quantity; // Soma todas as quantidades
+        }, 0);
       },
     }),
-    { // Configurações do middleware de persistência
-      name: "cafe:cart", // Nome da chave no AsyncStorage
-      storage: createJSONStorage(() => AsyncStorage), // Configura AsyncStorage como storage
+    {
+      name: "cafezinho:cart", // Nome único para o storage
+      storage: createJSONStorage(() => AsyncStorage), // Usa AsyncStorage para persistência
     }
   )
 );
